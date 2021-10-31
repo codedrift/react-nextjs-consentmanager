@@ -1,0 +1,67 @@
+:root {
+    --accent-color: #008ffb;
+    --border-radius: 4px;
+}
+
+.rncm__root {
+    background-color: white;
+    color: black;
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    max-width: 600px;
+    width: 100%;
+    border-radius: var(--border-radius);
+    padding: 16px;
+    box-shadow: 2px 8px 23px 3px rgba(0, 0, 0, 0.5);
+    border-top: 2px solid var(--accent-color);
+}
+
+.rncm__title {
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+
+.rncm__text {
+    margin-bottom: 8px;
+}
+
+.rncm__toggles {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.rncm__toggle {
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.rncm__toggle>input {
+    margin-right: 8px;
+}
+
+.rncm__buttons {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.rncm__button {
+    border: 2px solid var(--accent-color);
+    background: none;
+    outline: none;
+    cursor: pointer;
+    border-radius: var(--border-radius);
+    padding: 8px 16px;
+    margin: 8px;
+    font-weight: bold;
+}
+
+.rncm__settings-wrapper {
+    display: flex;
+}
