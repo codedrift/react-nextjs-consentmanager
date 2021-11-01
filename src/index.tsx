@@ -155,17 +155,18 @@ export class ConsentManager extends React.Component<
     } else {
       const currentAvailable = JSON.stringify(this.getAvailableCookies())
       const consentedAvailable = JSON.stringify(data.availableCookies)
-      this.setState({
-        enabledCookies: data.enabledCookies || [],
-        enabledCookieTypes: data.enabledCookieTypes || [CookieType.ESSENTIAL]
-      })
+      this.setState(
+        {
+          enabledCookies: data.enabledCookies || [],
+          enabledCookieTypes: data.enabledCookieTypes || [CookieType.ESSENTIAL]
+        },
+        this.notifyConsentState
+      )
       // cookie config changed. show main screen
       if (currentAvailable !== consentedAvailable) {
         this.setState({
           view: View.MAIN
         })
-      } else {
-        this.props.onChange(this.state.enabledCookies)
       }
     }
   }
@@ -193,6 +194,10 @@ export class ConsentManager extends React.Component<
         )
       }
     }
+  }
+
+  notifyConsentState() {
+    this.props.onChange(this.state.enabledCookies)
   }
 
   getAvailableCookies() {
