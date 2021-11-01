@@ -1,16 +1,21 @@
+.rncm__wrapper {
+    padding: 16px;
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    z-index: 1000;
+    max-width: 100vw;
+}
+
 .rncm__root {
     background-color: white;
     color: #121212;
-    position: fixed;
-    bottom: 16px;
-    right: 16px;
     box-shadow: 0 0.25em 0.25em 0 rgba(0, 0, 0, 0.3);
     border: 1px solid #f0f0f0;
 }
 
 .rncm__root-card {
     max-width: 500px;
-    width: 100%;
     border-radius: 4px;
     padding: 16px;
 }

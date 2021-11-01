@@ -445,7 +445,7 @@ export class ConsentManager extends React.Component<
     )
   }
 
-  render() {
+  renderConsentManager() {
     const { view } = this.state
     // console.log(this.state)
     switch (view) {
@@ -457,5 +457,9 @@ export class ConsentManager extends React.Component<
       default:
         return this.renderHiddenView()
     }
+  }
+
+  render() {
+    return <div className='rncm__wrapper'>{this.renderConsentManager()}</div>
   }
 }
