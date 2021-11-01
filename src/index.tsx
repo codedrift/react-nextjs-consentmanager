@@ -3,7 +3,6 @@ import clsx from 'clsx'
 import * as React from 'react'
 import { IoFingerPrintOutline } from 'react-icons/io5'
 import Toggle from 'react-toggle'
-import 'react-toggle/style.css'
 import Cookies from 'universal-cookie'
 import './styles.css'
 import { onlyUnique } from './util'
@@ -165,6 +164,8 @@ export class ConsentManager extends React.Component<
         this.setState({
           view: View.MAIN
         })
+      } else {
+        this.props.onChange(this.state.enabledCookies)
       }
     }
   }
