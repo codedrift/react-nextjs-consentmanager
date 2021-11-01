@@ -1,6 +1,6 @@
 {
     "name": "@codedrift/react-nextjs-consentmanager",
-    "version": "2.0.2",
+    "version": "2.0.3",
     "description": "Library to handle cookie consent management in nextjs",
     "author": "codedrift",
     "license": "MIT",
