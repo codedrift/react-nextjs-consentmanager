@@ -61,7 +61,11 @@
         "dist"
     ],
     "dependencies": {
+        "@types/react-toggle": "^4.0.3",
         "autobind-decorator": "^2.4.0",
+        "clsx": "^1.1.1",
+        "react-icons": "^4.3.1",
+        "react-toggle": "^4.1.2",
         "universal-cookie": "^4.0.4"
     }
 }

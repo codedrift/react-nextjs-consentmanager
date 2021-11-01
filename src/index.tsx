@@ -1,8 +1,13 @@
 import { boundMethod } from 'autobind-decorator'
+import clsx from 'clsx'
 import * as React from 'react'
+import { IoFingerPrintOutline } from 'react-icons/io5'
+import Toggle from 'react-toggle'
+import 'react-toggle/style.css'
 import Cookies from 'universal-cookie'
 import './styles.css'
 import { onlyUnique } from './util'
+
 export enum CookieType {
   ESSENTIAL = 'ESSENTIAL',
   FUNCTIONAL = 'FUNCTIONAL',
@@ -11,29 +16,37 @@ export enum CookieType {
 }
 
 export enum I18nKeys {
-  SETTINGS = 'SETTINGS'
+  SETTINGS = 'SETTINGS',
+  BACK = 'BACK',
+  ON = 'ON',
+  OFF = 'OFF',
+  ESSENTIAL = 'ESSENTIAL',
+  FUNCTIONAL = 'FUNCTIONAL',
+  STATISTICS = 'STATISTICS',
+  MARKETING = 'MARKETING',
+  ACCEPT_ALL = 'ACCEPT_ALL',
+  SAVE = 'SAVE',
+  MAIN_TITLE = 'MAIN_TITLE',
+  MAIN_TEXT = 'MAIN_TEXT',
+  SETTINGS_TEXT = 'SETTINGS_TEXT'
 }
 
 export type CookieInfo = {
   id: string
   name: string
   type: CookieType
+  reason: string
+  provider: string
+  privacyPolicyLink: string
 }
+
+export type I18NTranslations = { [TKey in I18nKeys]: string }
 
 export type ConsentManagerOptions = {
   cookies: CookieInfo[]
   privacyPolicyLink: string
-  i18n: {
-    title: string
-    text: string
-    cookieTypes: { [TKey in CookieType]: string }
-    other: { [TKey in I18nKeys]: string }
-    buttons: {
-      acceptAll: string
-      declineAll: string
-      options: string
-    }
-  }
+  impressLink: string
+  i18n: I18NTranslations
 }
 
 export enum View {
@@ -44,11 +57,78 @@ export enum View {
 
 export type ConsentManagerProps = {
   options: ConsentManagerOptions
+  onChange: (enabledCookies: string[]) => unknown
 }
 
 type ConsentManagerState = {
-  selectedCookieTypes: string[]
+  enabledCookieTypes: string[]
   view: View
+  enabledCookies: string[]
+}
+
+const COOKIE_NAME = 'rncm_consent'
+
+type ConsentData = {
+  enabledCookies: string[]
+  enabledCookieTypes: string[]
+  availableCookies: string[]
+}
+
+const SettingRow: React.FC<{
+  cookie: CookieInfo
+  enabled: boolean
+  i18n: I18NTranslations
+  onToggle: (e: React.ChangeEvent<HTMLInputElement>) => unknown
+}> = ({
+  cookie: { name, privacyPolicyLink, reason, type, provider },
+  onToggle,
+  i18n,
+  enabled
+}) => {
+  return (
+    <div className='rncm__setting-row'>
+      <div className='rncm__setting-row-header'>
+        <div className='rncm__setting-row-title'>
+          <h4>{name}</h4>
+          <h5>{provider}</h5>
+        </div>
+        <div className='rncm__setting-row-state'>
+          {enabled ? i18n[I18nKeys.ON] : i18n[I18nKeys.OFF]}
+        </div>
+        <div className='rncm__setting-row-toggle'>
+          <Toggle
+            disabled={type === CookieType.ESSENTIAL}
+            checked={enabled}
+            onChange={onToggle}
+          />
+        </div>
+      </div>
+      <p>{reason}</p>
+      <a href={privacyPolicyLink} target='_blank' rel='noreferrer noopener'>
+        Datenschutzerklärung
+      </a>
+    </div>
+  )
+}
+
+const Button: React.FC<{
+  onClick: () => unknown
+  link?: boolean
+  cta?: boolean
+  outline?: boolean
+}> = ({ onClick, children, link, cta, outline }) => {
+  return (
+    <button
+      className={clsx('rncm__button', {
+        'rncm__button-link': link,
+        'rncm__button-outline': outline,
+        'rncm__button-cta': cta
+      })}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  )
 }
 
 // needs to be a class component so nextjs always renders it client-side
@@ -61,8 +141,167 @@ export class ConsentManager extends React.Component<
   constructor(props: ConsentManagerProps) {
     super(props)
     this.state = {
-      selectedCookieTypes: Object.keys(CookieType),
+      enabledCookieTypes: Object.keys(CookieType),
+      view: View.HIDDEN,
+      enabledCookies: props.options.cookies.map((c) => c.id)
+    }
+  }
+
+  componentDidMount() {
+    const data = this.readCookie()
+    if (!data) {
+      this.setState({
+        view: View.MAIN
+      })
+    } else {
+      const currentAvailable = JSON.stringify(this.getAvailableCookies())
+      const consentedAvailable = JSON.stringify(data.availableCookies)
+      this.setState({
+        enabledCookies: data.enabledCookies || [],
+        enabledCookieTypes: data.enabledCookieTypes || [CookieType.ESSENTIAL]
+      })
+      // cookie config changed. show main screen
+      if (currentAvailable !== consentedAvailable) {
+        this.setState({
+          view: View.MAIN
+        })
+      }
+    }
+  }
+
+  toggleCookieType(type: CookieType) {
+    return (e: React.ChangeEvent<HTMLInputElement>) => {
+      const checked = e.target.checked
+      if (checked) {
+        this.setState(
+          {
+            enabledCookieTypes: [...this.state.enabledCookieTypes, type].filter(
+              onlyUnique
+            )
+          },
+          this.setEnabledCookiesByCookieTypes
+        )
+      } else {
+        this.setState(
+          {
+            enabledCookieTypes: this.state.enabledCookieTypes.filter(
+              (t) => t !== type
+            )
+          },
+          this.setEnabledCookiesByCookieTypes
+        )
+      }
+    }
+  }
+
+  getAvailableCookies() {
+    return this.props.options.cookies.map((c) => c.id)
+  }
+
+  getListedCookieTypes() {
+    const providedTypes = this.props.options.cookies.map((c) => c.type)
+
+    return [CookieType.ESSENTIAL, ...providedTypes].filter(onlyUnique)
+  }
+
+  readCookie(): ConsentData | null {
+    const cookie = this.cookies.get(COOKIE_NAME)
+    return cookie || null
+  }
+
+  @boundMethod
+  persistState() {
+    const data: ConsentData = {
+      enabledCookies: this.state.enabledCookies,
+      availableCookies: this.props.options.cookies.map((c) => c.id),
+      enabledCookieTypes: this.state.enabledCookieTypes
+    }
+    this.cookies.set(COOKIE_NAME, JSON.stringify(data), {
+      path: '/',
+      expires: new Date(new Date().getTime() + 1000 * 60 * 60 * 24 * 365)
+    })
+    this.props.onChange(this.state.enabledCookies)
+  }
+
+  @boundMethod
+  handleAcceptAll() {
+    this.setState(
+      {
+        enabledCookieTypes: Object.keys(CookieType),
+        enabledCookies: this.getAvailableCookies(),
+        view: View.HIDDEN
+      },
+      this.persistState
+    )
+  }
+
+  @boundMethod
+  handleSave() {
+    this.persistState()
+    this.setState({
+      view: View.HIDDEN
+    })
+  }
+
+  @boundMethod
+  handleShowSettings() {
+    this.setState({
+      view: View.SETTINGS
+    })
+  }
+
+  @boundMethod
+  handleShowMain() {
+    this.setState({
       view: View.MAIN
+    })
+  }
+
+  @boundMethod
+  setCookieTypesByEnabledCookies() {
+    this.setState({
+      enabledCookieTypes: [
+        CookieType.ESSENTIAL,
+        ...this.props.options.cookies
+          .filter((c) => this.state.enabledCookies.includes(c.id))
+          .map((c) => c.type)
+      ].filter(onlyUnique)
+    })
+  }
+
+  @boundMethod
+  setEnabledCookiesByCookieTypes() {
+    this.setState({
+      enabledCookies: [
+        ...this.state.enabledCookies,
+        ...this.props.options.cookies
+          .filter((c) => this.state.enabledCookieTypes.includes(c.type))
+          .map((c) => c.id)
+      ].filter(onlyUnique)
+    })
+  }
+
+  @boundMethod
+  toggleCookie(cookie: CookieInfo) {
+    return (e: React.ChangeEvent<HTMLInputElement>) => {
+      const checked = e.target.checked
+      if (checked) {
+        this.setState(
+          {
+            enabledCookies: [...this.state.enabledCookies, cookie.id]
+          },
+          this.setCookieTypesByEnabledCookies
+        )
+      } else {
+        this.setState(
+          {
+            enabledCookies: this.state.enabledCookies.filter(
+              (c) => c !== cookie.id
+            )
+          },
+          this.setCookieTypesByEnabledCookies
+        )
+      }
     }
   }
 
@@ -74,35 +313,8 @@ export class ConsentManager extends React.Component<
     )
   }
 
-  handleSelectedCookieTypeChange(type: CookieType) {
-    return (e: React.ChangeEvent<HTMLInputElement>) => {
-      const checked = e.target.checked
-      console.log('change!', type, checked)
-      if (checked) {
-        this.setState({
-          selectedCookieTypes: [...this.state.selectedCookieTypes, type].filter(
-            onlyUnique
-          )
-        })
-      } else {
-        this.setState({
-          selectedCookieTypes: this.state.selectedCookieTypes.filter(
-            (t) => t !== type
-          )
-        })
-      }
-    }
-  }
-
-  getListedCookieTypes() {
-    const providedTypes = this.props.options.cookies.map((c) => c.type)
-
-    return [CookieType.ESSENTIAL, ...providedTypes].filter(onlyUnique)
-  }
-
   renderToggles() {
     const listedTypes = this.getListedCookieTypes()
-
     return (
       <div className='rncm__toggles'>
         {listedTypes.map((t) => {
@@ -113,12 +325,10 @@ export class ConsentManager extends React.Component<
                 type='checkbox'
                 id={id}
                 disabled={t === CookieType.ESSENTIAL}
-                onChange={this.handleSelectedCookieTypeChange(t)}
-                checked={this.state.selectedCookieTypes.includes(t)}
+                onChange={this.toggleCookieType(t)}
+                checked={this.state.enabledCookieTypes.includes(t)}
               />
-              <label htmlFor={id}>
-                {this.props.options.i18n.cookieTypes[t]}
-              </label>
+              <label htmlFor={id}>{this.props.options.i18n[t]}</label>
             </div>
           )
         })}
@@ -126,105 +336,125 @@ export class ConsentManager extends React.Component<
     )
   }
 
-  @boundMethod
-  writeCookie() {
-    this.cookies.set(
-      'rncm_selected-types',
-      JSON.stringify(this.state.selectedCookieTypes),
-      {
-        path: '/',
-        expires: new Date(new Date().getTime() + 1000 * 60 * 60 * 24 * 365)
-      }
+  renderBottomLinks() {
+    const { privacyPolicyLink, impressLink } = this.props.options
+    return (
+      <div className='rncm__bottom_links'>
+        <a href={privacyPolicyLink} target='_blank' rel='noreferrer noopener'>
+          Datenschutzerklärung
+        </a>
+        <span>|</span>
+        <a href={impressLink} target='_blank' rel='noreferrer noopener'>
+          Impressum
+        </a>
+      </div>
     )
   }
 
-  @boundMethod
-  handleAcceptAll() {
-    console.log('accept all')
-    this.setState(
-      {
-        selectedCookieTypes: Object.keys(CookieType)
-      },
-      this.writeCookie
+  renderButtons() {
+    const { i18n } = this.props.options
+    return (
+      <div className='rncm__buttons'>
+        <Button link onClick={this.handleShowSettings}>
+          {i18n[I18nKeys.SETTINGS]}
+        </Button>
+        <Button outline onClick={this.handleSave}>
+          {i18n[I18nKeys.SAVE]}
+        </Button>
+        <Button cta onClick={this.handleAcceptAll}>
+          {i18n[I18nKeys.ACCEPT_ALL]}
+        </Button>
+      </div>
     )
-  }
-
-  @boundMethod
-  handleDeclineAll() {
-    console.log('decline all')
-    this.setState(
-      {
-        selectedCookieTypes: [CookieType.ESSENTIAL]
-      },
-      this.writeCookie
-    )
-  }
-
-  @boundMethod
-  handleShowSettings() {
-    this.setState({
-      view: View.SETTINGS
-    })
   }
 
   renderMainView() {
-    const {
-      i18n: {
-        text,
-        title,
-        buttons: { declineAll, acceptAll, options }
-      }
-    } = this.props.options
+    const { i18n } = this.props.options
     return (
-      <div className='rncm__root'>
-        <div className='rncm__title'>{title}</div>
-        <div className='rncm__text'>{text}</div>
-        {this.renderToggles()}
-        <div className='rncm__buttons'>
-          {this.renderButton(options, this.handleShowSettings)}
-          {this.renderButton(declineAll, this.handleDeclineAll)}
-          {this.renderButton(acceptAll, this.handleAcceptAll)}
+      <div className='rncm__root rncm__root-card'>
+        <div className='rncm__title'>
+          <span className='rncm__cookie' role='img' aria-label='cookie'>
+            &#127850;
+          </span>
+          {i18n[I18nKeys.MAIN_TITLE]}
         </div>
+        <div className='rncm__text'>{i18n[I18nKeys.MAIN_TEXT]}</div>
+        {this.renderToggles()}
+        {this.renderButtons()}
+        {this.renderBottomLinks()}
+      </div>
+    )
+  }
+
+  renderHiddenView() {
+    return (
+      <div
+        className='rncm__root rncm__root-hidden'
+        onClick={this.handleShowMain}
+      >
+        <IoFingerPrintOutline />
       </div>
     )
   }
 
   renderSettingsView() {
-    const {
-      cookies,
-      i18n: { other }
-    } = this.props.options
+    const { cookies, i18n } = this.props.options
     const listedTypes = this.getListedCookieTypes()
 
     return (
-      <div className='rncm__root'>
-        <div className='rncm__title'>{other[I18nKeys.SETTINGS]}</div>
-        <div className='rncm__settings-wrapper'>
-          <div>
-            {listedTypes.map((t) => (
-              <button key={t}>{t}</button>
-            ))}
-          </div>
+      <div className='rncm__root rncm__root-card'>
+        <div className='rncm__title'>
+          <span className='rncm__cookie' role='img' aria-label='cookie'>
+            &#127850;
+          </span>
+          {i18n[I18nKeys.SETTINGS]}
         </div>
-        <ul>
-          {cookies.map((c) => (
-            <div key={c.id}>{c.name}</div>
+        <div className='rncm__text'>{i18n[I18nKeys.SETTINGS_TEXT]}</div>
+        <div className='rncm__settings-list'>
+          {listedTypes.map((t) => (
+            <div className='rncm__settings-section' key={t}>
+              <h3>{this.props.options.i18n[t]}</h3>
+              {cookies
+                .filter((c) => c.type === t)
+                .map((c) => (
+                  <SettingRow
+                    key={c.id}
+                    cookie={c}
+                    i18n={i18n}
+                    onToggle={this.toggleCookie(c)}
+                    enabled={this.state.enabledCookies.includes(c.id)}
+                  />
+                ))}
+            </div>
           ))}
-        </ul>
+        </div>
+        <div className='rncm__buttons'>
+          <Button outline onClick={this.handleShowMain}>
+            {i18n[I18nKeys.BACK]}
+          </Button>
+          <Button outline onClick={this.handleSave}>
+            {i18n[I18nKeys.SAVE]}
+          </Button>
+          <Button cta onClick={this.handleAcceptAll}>
+            {i18n[I18nKeys.ACCEPT_ALL]}
+          </Button>
+        </div>
+        {this.renderBottomLinks()}
       </div>
     )
   }
 
   render() {
     const { view } = this.state
-
+    // console.log(this.state)
     switch (view) {
       case View.MAIN:
         return this.renderMainView()
       case View.SETTINGS:
         return this.renderSettingsView()
+      case View.HIDDEN:
       default:
-        return null
+        return this.renderHiddenView()
     }
   }
 }
