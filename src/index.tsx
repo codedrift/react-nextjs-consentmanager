@@ -110,12 +110,15 @@ const SettingRow: React.FC<{
   )
 }
 
-const Button: React.FC<{
+type ButtonProps = {
   onClick: () => unknown
   link?: boolean
   cta?: boolean
   outline?: boolean
-}> = ({ onClick, children, link, cta, outline }) => {
+  children: React.ReactNode
+}
+
+const Button = ({ onClick, children, link, cta, outline }: ButtonProps) => {
   return (
     <button
       className={clsx('rncm__button', {
